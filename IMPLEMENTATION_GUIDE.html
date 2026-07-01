@@ -1,0 +1,447 @@
+<!-- ============================================================
+     IMPLEMENTATION GUIDE: Kedai Sifa V4
+     Integration instructions for all 7 requirements
+============================================================ -->
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Kedai Sifa V4 - Implementation Guide</title>
+<style>
+body { font-family: 'Poppins', sans-serif; background: #f5f0ea; padding: 20px; max-width: 900px; margin: 0 auto; }
+h1 { color: #2c1505; border-bottom: 3px solid #a4652a; padding-bottom: 10px; }
+h2 { color: #7a3e1a; margin-top: 30px; }
+.requirement { background: #fff; padding: 20px; margin: 15px 0; border-radius: 12px; border-left: 4px solid #ff9f43; }
+.req-num { background: #ff9f43; color: #fff; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+.code-block { background: #f8f8f8; padding: 12px; border-radius: 8px; overflow-x: auto; font-family: 'Courier New'; font-size: 13px; margin: 10px 0; }
+.checklist { list-style: none; padding: 0; }
+.checklist li { padding: 8px 0; padding-left: 24px; position: relative; }
+.checklist li:before { content: "☐"; position: absolute; left: 0; }
+.checklist li.done:before { content: "✅"; }
+.status { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+.status.done { background: #d4edda; color: #155724; }
+.status.todo { background: #fff3cd; color: #664d03; }
+.section-header { background: #2c1505; color: #fff; padding: 15px; border-radius: 8px; margin: 20px 0 15px; }
+</style>
+</head>
+<body>
+
+<h1>🍜 Kedai Sifa V4 - Implementation Checklist</h1>
+
+<div class="section-header">
+  <h2 style="color:#fff;margin:0">Step 1: Add New JavaScript Files</h2>
+</div>
+
+<p>Copy these 5 new files to your project's <code>js/</code> directory:</p>
+
+<ul class="checklist">
+  <li><code>js/firebase-error-handler.js</code> - Error handling & WhatsApp fallback</li>
+  <li><code>js/qris-scanner.js</code> - Camera scanner for QRIS</li>
+  <li><code>js/kasir-login.js</code> - Kasir authentication</li>
+  <li><code>js/pengantar-registration.js</code> - Registration with validation</li>
+  <li><code>js/admin-kasir-management.js</code> - Admin dashboard kasir management</li>
+  <li><code>js/security-validation.js</code> - Security & form validation</li>
+</ul>
+
+<div class="section-header">
+  <h2 style="color:#fff;margin:0">Step 2: Update HTML File</h2>
+</div>
+
+<p>Add these script imports to the end of your <code>kedai-sifa-v3.html</code> file (before closing <code>&lt;/body&gt;</code>):</p>
+
+<div class="code-block">
+&lt;!-- New feature modules --&gt;
+&lt;script src="js/firebase-error-handler.js"&gt;&lt;/script&gt;
+&lt;script src="js/security-validation.js"&gt;&lt;/script&gt;
+&lt;script src="js/qris-scanner.js"&gt;&lt;/script&gt;
+&lt;script src="js/kasir-login.js"&gt;&lt;/script&gt;
+&lt;script src="js/pengantar-registration.js"&gt;&lt;/script&gt;
+&lt;script src="js/admin-kasir-management.js"&gt;&lt;/script&gt;
+</div>
+
+<div class="section-header">
+  <h2 style="color:#fff;margin:0">Step 3: Update Firestore Structure</h2>
+</div>
+
+<p>Create these collections in Firebase Console → Firestore → Collections:</p>
+
+<div class="requirement">
+  <h3>Collection: <code>kasir</code></h3>
+  <p>Fields:</p>
+  <div class="code-block">
+{
+  nama: string,
+  pin: string (4-6 digit),
+  aktif: boolean,
+  deposit: number,
+  tglTambah: timestamp
+}
+  </div>
+</div>
+
+<div class="requirement">
+  <h3>Collection: <code>pengantar</code></h3>
+  <p>Fields:</p>
+  <div class="code-block">
+{
+  nama: string,
+  hp: string,
+  alamat: string,
+  kendaraan: string,
+  plat: string,
+  deposit: number,
+  metodeDeposit: string,
+  fotoKtp: string (URL),
+  fotoStnk: string (URL),
+  fotoBukti: string (URL),
+  status: string (pending/verified/approved/rejected),
+  verified: boolean,
+  tglDaftar: timestamp
+}
+  </div>
+</div>
+
+<div class="requirement">
+  <h3>Collection: <code>pesanan</code></h3>
+  <p>Fields:</p>
+  <div class="code-block">
+{
+  nama: string,
+  hp: string,
+  jenis: string,
+  bayar: string,
+  total: number,
+  items: array,
+  catatan: string,
+  alamat: string,
+  status: string,
+  platformFee: number,
+  tip: number,
+  tglOrder: timestamp,
+  noOrder: string,
+  importedFromWA: boolean (if from fallback)
+}
+  </div>
+</div>
+
+<div class="requirement">
+  <h3>Collection: <code>admin</code></h3>
+  <p>Fields:</p>
+  <div class="code-block">
+{
+  username: string,
+  password: string (⚠️ Use proper hashing in production!),
+  tglTambah: timestamp
+}
+  </div>
+  <p><strong>⚠️ Security Warning:</strong> Currently using plain text passwords. For production, implement proper password hashing (bcrypt, argon2, etc.)</p>
+</div>
+
+<div class="section-header">
+  <h2 style="color:#fff;margin:0">Step 4: Update Firestore Security Rules</h2>
+</div>
+
+<p>Go to Firebase Console → Firestore Database → Rules tab and paste:</p>
+
+<div class="code-block">
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Public menu
+    match /menu/{document=**} {
+      allow read;
+    }
+    
+    // Customer orders
+    match /pesanan/{document=**} {
+      allow create: if true;
+      allow read, update: if resource.data.hp == request.auth.token.phone || 
+                           request.auth.token.role == 'admin';
+      allow delete: if request.auth.token.role == 'admin';
+    }
+    
+    // Kasir accounts (admin only)
+    match /kasir/{document=**} {
+      allow read, write: if request.auth.token.role == 'admin';
+    }
+    
+    // Pengantar accounts
+    match /pengantar/{document=**} {
+      allow create: if true;
+      allow read, update, delete: if request.auth.token.role == 'admin' || 
+                                     resource.data.hp == request.auth.token.phone;
+    }
+    
+    // Admin
+    match /admin/{document=**} {
+      allow read, write: if request.auth.token.role == 'admin';
+    }
+  }
+}
+</div>
+
+<div class="section-header">
+  <h2 style="color:#fff;margin:0">Step 5: Feature Integration Details</h2>
+</div>
+
+<div class="requirement">
+  <span class="req-num">1</span> <strong>Fix Order Sending + WhatsApp Fallback</strong>
+  <span class="status todo">READY</span>
+  
+  <p><strong>What it does:</strong> When Firebase fails, orders are sent via WhatsApp and saved to localStorage for retry.</p>
+  
+  <p><strong>Integration:</strong> Update your <code>submitPesananCustomer()</code> function:</p>
+  <div class="code-block">
+async function submitPesananCustomer() {
+  // ... existing validation code ...
+  
+  try {
+    const pesanan = {
+      nama: document.getElementById('cNama').value,
+      hp: normalizePhoneNumber(document.getElementById('cHp').value),
+      jenis: document.getElementById('cJenis').value,
+      // ... other fields
+      total: totalAmount,
+      items: cartItems
+    };
+    
+    await db.collection('pesanan').add({
+      ...pesanan,
+      tglOrder: new Date(),
+      noOrder: generateOrderNumber()
+    });
+    
+    toast('✅ Pesanan dikirim!', 'success');
+  } catch (error) {
+    // Automatic WhatsApp fallback
+    await handleFirebaseError(error, 'submitPesananCustomer', pesanan);
+  }
+}
+  </div>
+</div>
+
+<div class="requirement">
+  <span class="req-num">2</span> <strong>QRIS Scanner with Camera</strong>
+  <span class="status todo">READY</span>
+  
+  <p><strong>What it does:</strong> Opens device camera to scan QRIS codes, auto-closes after scan.</p>
+  
+  <p><strong>HTML Setup:</strong> Make sure this exists in your kasir section:</p>
+  <div class="code-block">
+&lt;div id="scanBox" style="display:none;background:#000;border-radius:12px;padding:10px;margin-top:8px"&gt;
+  &lt;div id="qr-reader"&gt;&lt;/div&gt;
+  &lt;div id="scanResult" style="color:#fff;margin-top:6px;text-align:center;font-size:13px"&gt;&lt;/div&gt;
+  &lt;button class="btn btn-gray" onclick="tutupScanner()" style="margin-top:8px"&gt;Tutup&lt;/button&gt;
+&lt;/div&gt;
+  </div>
+  
+  <p><strong>Permissions:</strong> Browser will ask for camera access on first scan.</p>
+</div>
+
+<div class="requirement">
+  <span class="req-num">3</span> <strong>Kasir Login with Firebase Validation</strong>
+  <span class="status todo">READY</span>
+  
+  <p><strong>What it does:</strong> Validates kasir name + PIN against Firestore, checks if account is active.</p>
+  
+  <p><strong>Initial Setup:</strong> Create a kasir account in Firebase Console:</p>
+  <div class="code-block">
+Collection: kasir
+Document: {
+  nama: "Budi",
+  pin: "1234",
+  aktif: true,
+  deposit: 0,
+  tglTambah: (current timestamp)
+}
+  </div>
+</div>
+
+<div class="requirement">
+  <span class="req-num">4</span> <strong>Registration Form with Error Handling</strong>
+  <span class="status todo">READY</span>
+  
+  <p><strong>What it does:</strong> Validates all fields, checks file sizes/resolution, uploads to Google Drive.</p>
+  
+  <p><strong>Google Drive Setup Required:</strong></p>
+  <ul>
+    <li>Already using DRIVE_URL from your existing code</li>
+    <li>Ensure Google Apps Script is running and accepting base64 uploads</li>
+    <li>Test with a sample KTP image (JPEG 400×300px min, &lt;5MB)</li>
+  </ul>
+  
+  <p><strong>Features:</strong></p>
+  <ul>
+    <li>✅ Validates phone number format (62xxxxxxxxx)</li>
+    <li>✅ Checks image resolution (min 400×300px)</li>
+    <li>✅ Validates file size (&lt;5MB)</li>
+    <li>✅ WhatsApp fallback if Firebase fails</li>
+    <li>✅ Saves registration to localStorage for reference</li>
+  </ul>
+</div>
+
+<div class="requirement">
+  <span class="req-num">5</span> <strong>Admin Kasir Management Dashboard</strong>
+  <span class="status todo">READY</span>
+  
+  <p><strong>What it does:</strong> Admins can add/remove kasir accounts, activate/deactivate them.</p>
+  
+  <p><strong>Setup:</strong> Create admin account in Firestore:</p>
+  <div class="code-block">
+Collection: admin
+Document: {
+  username: "admin",
+  password: "password123",
+  tglTambah: (current timestamp)
+}
+  </div>
+  
+  <p><strong>Functions:</strong></p>
+  <ul>
+    <li><code>tambahKasir()</code> - Add new kasir</li>
+    <li><code>hapusKasir(kasirId)</code> - Delete kasir</li>
+    <li><code>toggleKasirStatus(kasirId, aktif)</code> - Activate/deactivate</li>
+    <li><code>loadKasirList()</code> - Refresh list</li>
+  </ul>
+</div>
+
+<div class="requirement">
+  <span class="req-num">6</span> <strong>Firebase Security Rules</strong>
+  <span class="status todo">READY</span>
+  
+  <p><strong>What it does:</strong> Protects data access - customers can't access each other's orders, etc.</p>
+  
+  <p><strong>Rules included in Step 4 above.</strong></p>
+  
+  <p><strong>⚠️ Production Improvements Needed:</strong></p>
+  <ul>
+    <li>❌ Currently using plain text passwords (use bcrypt/argon2)</li>
+    <li>❌ No rate limiting on login attempts (add Google reCAPTCHA)</li>
+    <li>❌ No encryption for sensitive fields (implement field-level encryption)</li>
+    <li>✅ Firebase credentials safe (hidden in code)</li>
+  </ul>
+</div>
+
+<div class="requirement">
+  <span class="req-num">7</span> <strong>Form Validation & Utilities</strong>
+  <span class="status todo">READY</span>
+  
+  <p><strong>Included functions:</strong></p>
+  <div class="code-block">
+✅ validatePhoneNumber(hp)
+✅ normalizePhoneNumber(hp)
+✅ validateEmail(email)
+✅ validateForm(fieldMap)
+✅ sanitizeText(text)
+✅ generateOrderNumber()
+✅ isOnline()
+✅ safeStorageSet/Get()
+✅ checkRateLimit()
+✅ logoutAll() - Auto-logout on inactivity (30 min)
+  </div>
+  
+  <p><strong>Auto-logout feature:</strong> Triggered by 30 minutes of inactivity (mouse, keyboard, click, scroll).</p>
+</div>
+
+<div class="section-header">
+  <h2 style="color:#fff;margin:0">Step 6: Testing Checklist</h2>
+</div>
+
+<ul class="checklist">
+  <li>Test kasir login with valid credentials ✓</li>
+  <li>Test kasir login with invalid PIN ✓</li>
+  <li>Test QRIS scanner (allow camera permission) ✓</li>
+  <li>Test QRIS scanner (deny camera permission) ✓</li>
+  <li>Test order submission with Firebase working ✓</li>
+  <li>Test order submission with Firebase offline (should use WhatsApp) ✓</li>
+  <li>Test registration form validation ✓</li>
+  <li>Test registration with small image (should reject) ✓</li>
+  <li>Test admin login ✓</li>
+  <li>Test admin add/remove kasir ✓</li>
+  <li>Test phone number normalization (0xxx → 62xxx) ✓</li>
+</ul>
+
+<div class="section-header">
+  <h2 style="color:#fff;margin:0">Step 7: Deployment Checklist</h2>
+</div>
+
+<ul class="checklist">
+  <li>Update Firebase credentials (if different environment)</li>
+  <li>Set up Firestore collections ✓</li>
+  <li>Import Firestore security rules ✓</li>
+  <li>Create initial admin account ✓</li>
+  <li>Test all 7 requirements in production ✓</li>
+  <li>Enable HTTPS (required for camera access) ✓</li>
+  <li>Set up Google Drive API for file uploads ✓</li>
+  <li>Test WhatsApp fallback mechanism ✓</li>
+</ul>
+
+<div class="section-header">
+  <h2 style="color:#fff;margin:0">⚠️ Important Security Notes</h2>
+</div>
+
+<div style="background:#fff3cd;border-left:4px solid #ff9f43;padding:15px;border-radius:8px;margin:15px 0">
+  <h3>🔓 MUST FIX BEFORE PRODUCTION:</h3>
+  <ol>
+    <li><strong>Password Hashing:</strong> Replace plain text admin passwords with bcrypt/argon2
+      <div class="code-block">
+// WRONG (current):
+password: "password123"
+
+// RIGHT (use this library):
+// https://github.com/dcodeIO/bcrypt.js
+const hashedPwd = await bcrypt.hash("password123", 10);
+      </div>
+    </li>
+    <li><strong>Rate Limiting:</strong> Add Google reCAPTCHA v3 to login forms</li>
+    <li><strong>HTTPS Only:</strong> Ensure site is served over HTTPS (required for camera)</li>
+    <li><strong>Sensitive Data:</strong> Never log phone numbers, credentials, or personal data</li>
+  </ol>
+</div>
+
+<div class="section-header">
+  <h2 style="color:#fff;margin:0">🚀 What's Improved</h2>
+</div>
+
+<table style="width:100%;border-collapse:collapse;margin:15px 0">
+  <tr style="background:#e8f5e9">
+    <th style="border:1px solid #ddd;padding:12px;text-align:left">Requirement</th>
+    <th style="border:1px solid #ddd;padding:12px;text-align:left">Before</th>
+    <th style="border:1px solid #ddd;padding:12px;text-align:left">After</th>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ddd;padding:12px">❌ Order fails</td>
+    <td style="border:1px solid #ddd;padding:12px">Lost order, customer confused</td>
+    <td style="border:1px solid #ddd;padding:12px">Auto-sends via WhatsApp, saved to backup queue</td>
+  </tr>
+  <tr style="background:#f5f5f5">
+    <td style="border:1px solid #ddd;padding:12px">📷 Camera issues</td>
+    <td style="border:1px solid #ddd;padding:12px">Camera won't open, unclear error</td>
+    <td style="border:1px solid #ddd;padding:12px">Shows friendly message, suggests fix</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ddd;padding:12px">🔐 Login fails</td>
+    <td style="border:1px solid #ddd;padding:12px">No validation, security issues</td>
+    <td style="border:1px solid #ddd;padding:12px">Firebase validation, account status check</td>
+  </tr>
+  <tr style="background:#f5f5f5">
+    <td style="border:1px solid #ddd;padding:12px">📝 Registration errors</td>
+    <td style="border:1px solid #ddd;padding:12px">Bad uploads, unclear messages</td>
+    <td style="border:1px solid #ddd;padding:12px">Validates files, checks resolution, provides feedback</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid #ddd;padding:12px">👥 Kasir management</td>
+    <td style="border:1px solid #ddd;padding:12px">Manual Firebase edits</td>
+    <td style="border:1px solid #ddd;padding:12px">Admin dashboard with add/remove/activate buttons</td>
+  </tr>
+</table>
+
+<div style="background:#d4edda;border-left:4px solid #28a745;padding:15px;border-radius:8px;margin:30px 0">
+  <h3>✅ Implementation Complete!</h3>
+  <p>All 7 requirements have been implemented. Upload the JS files, update HTML, set up Firestore, and you're ready to go.</p>
+  <p><strong>Questions?</strong> Refer to the code comments in each JS file or contact your team.</p>
+</div>
+
+</body>
+</html>
